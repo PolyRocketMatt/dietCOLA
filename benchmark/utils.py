@@ -484,6 +484,7 @@ def plot_velocity_cut_vs_time(
 
     plt.xlabel('Frame (relative to cut)')
     plt.ylabel('Velocity (pixels/frame)')
+    plt.xticks(np.arange(int(df['frame_rel'].min()), int(df['frame_rel'].max()) + 1, 1))
     plt.title('Point Velocities (relative to cut) over Time', fontweight='bold')
     plt.grid(True, alpha=0.3, linestyle='--')
     plt.legend()
@@ -551,6 +552,7 @@ def plot_v_perpendicular_vs_time(
 
     plt.xlabel('Frame (relative to cut)')
     plt.ylabel('Perpendicular Velocity (pixels/frame)')
+    plt.xticks(np.arange(int(df['frame_rel'].min()), int(df['frame_rel'].max()) + 1, 1))
     plt.title('Point Perpendicular Velocities over Time' + ('' if not cell_type else f'Cell Type: {cell_type}'), fontweight='bold')
     plt.grid(True, alpha=0.3, linestyle='--')
     plt.legend()
@@ -564,25 +566,19 @@ def plot_v_perpendicular_vs_time(
 
 
 def compare_v_perpendicular_vs_time(
-        df1: pd.DataFrame,
-        df2: pd.DataFrame,
-        df3: pd.DataFrame = None,
-        label1: str = 'Dataset 1',
-        label2: str = 'Dataset 2',
-        label3: str = 'Dataset 3',
+        *datasets,
         cell_ids: list = None,
         output_path: str = None,
         abs: bool = True,
         end_offset: int = None,
     ) -> None:
     """
-    Compares the perpendicular velocities of points over time (frame_rel) between two (or three) datasets.
-    Plots the average perpendicular velocity from both datasets on the same graph.
+    Compares the perpendicular velocities of points over time (frame_rel) between multiple datasets.
+    Plots the average perpendicular velocity from all datasets on the same graph.
 
     Parameters:
-    df1 (pd.DataFrame): First DataFrame containing 'frame_rel', 'v_perpendicular', and 'cell_id' columns.
-    df2 (pd.DataFrame): Second DataFrame containing 'frame_rel', 'v_perpendicular', and 'cell_id' columns.
-    df3 (pd.DataFrame): OPTIONAL Third DataFrame containing 'frame_rel', 'v_perpendicular', and 'cell_id' columns.
+    *datasets : tuple of (df, label, color)
+        Variable number of datasets, each as a tuple of (dataframe, label, color)
     cell_ids (list): List of cell IDs to include in the plot. If None, all cells are included.
     output_path (str): Path to save the plot. If None, the plot is shown instead.
     abs (bool): If True, compute the average of the absolute perpendicular velocities.
@@ -591,57 +587,49 @@ def compare_v_perpendicular_vs_time(
     Returns:
     None
     """
-    df1 = df1.copy()
-    df2 = df2.copy()
-    if df3 is not None:
-        df3 = df3.copy()
-
-    # Filter by cell_ids if provided
-    if cell_ids is not None:
-        df1 = df1[df1['cell_id'].isin(cell_ids)]
-        df2 = df2[df2['cell_id'].isin(cell_ids)]
-        if df3 is not None:
-            df3 = df3[df3['cell_id'].isin(cell_ids)]
-
-    # Drop NaNs in required columns
-    df1 = df1.dropna(subset=['frame_rel', 'v_perpendicular'])
-    df2 = df2.dropna(subset=['frame_rel', 'v_perpendicular'])
-    if df3 is not None:
-        df3 = df3.dropna(subset=['frame_rel', 'v_perpendicular'])
-
-    if end_offset is not None:
-        df1 = df1[df1['frame_rel'] <= end_offset]
-        df2 = df2[df2['frame_rel'] <= end_offset]
-        if df3 is not None:
-            df3 = df3[df3['frame_rel'] <= end_offset]
-
-    if abs:
-        df1['v_perpendicular'] = df1['v_perpendicular'].abs()
-        df2['v_perpendicular'] = df2['v_perpendicular'].abs()
-        if df3 is not None:
-            df3['v_perpendicular'] = df3['v_perpendicular'].abs()
-
+    if len(datasets) == 0:
+        raise ValueError("At least one dataset must be provided")
+    
     plt.figure(figsize=(9.5, 5))
-
-    # Compute average across frames for both datasets
-    avg1 = df1.groupby('frame_rel')['v_perpendicular'].mean()
-    avg2 = df2.groupby('frame_rel')['v_perpendicular'].mean()
-    if df3 is not None:
-        avg3 = df3.groupby('frame_rel')['v_perpendicular'].mean()
+    
+    all_min_frames = []
+    all_max_frames = []
+    
+    for df, label, color in datasets:
+        df = df.copy()
         
-    # Labels depend on abs setting
-    label1 = label1 + ' Average |v_perpendicular|' if abs else label1 + ' Average v_perpendicular'
-    label2 = label2 + ' Average |v_perpendicular|' if abs else label2 + ' Average v_perpendicular'
-    label3 = label3 + ' Average |v_perpendicular|' if abs else label3 + ' Average v_perpendicular'
-
-    # Plot the average velocities
-    plt.plot(avg1.index, avg1.values, color='blue', linewidth=2.5, label=label1)
-    plt.plot(avg2.index, avg2.values, color='orange', linewidth=2.5, label=label2)
-    if df3 is not None:
-        plt.plot(avg3.index, avg3.values, color='green', linewidth=2.5, label=label3)
-
+        # Filter by cell_ids if provided
+        if cell_ids is not None:
+            df = df[df['cell_id'].isin(cell_ids)]
+        
+        # Drop NaNs in required columns
+        df = df.dropna(subset=['frame_rel', 'v_perpendicular'])
+        
+        if end_offset is not None:
+            df = df[df['frame_rel'] <= end_offset]
+        
+        if abs:
+            df['v_perpendicular'] = df['v_perpendicular_signed']
+        
+        # Compute average across frames
+        avg = df.groupby('frame_rel')['v_perpendicular'].mean()
+        
+        if len(avg) > 0:
+            all_min_frames.append(avg.index.min())
+            all_max_frames.append(avg.index.max())
+        
+        # Label depends on abs setting
+        plot_label = label + ' Average |v_perpendicular|' if abs else label + ' Average v_perpendicular'
+        
+        # Plot the average velocity
+        plt.plot(avg.index, avg.values, color=color, linewidth=2.5, label=plot_label)
+    
     plt.xlabel('Frame (relative to cut)')
     plt.ylabel('Perpendicular Velocity (pixels/frame)')
+    
+    if all_min_frames and all_max_frames:
+        plt.xticks(np.arange(int(min(all_min_frames)), int(max(all_max_frames)) + 1, 1))
+    
     plt.title('Comparison of Point Perpendicular Velocities over Time', fontweight='bold')
     plt.grid(True, alpha=0.3, linestyle='--')
     plt.legend()
@@ -652,3 +640,143 @@ def compare_v_perpendicular_vs_time(
         plt.show()
 
     return
+
+
+def compare_mean_displacement_velocity(
+        *datasets,
+        cell_ids: list = None,
+        output_path: str = None,
+        abs: bool = True,
+        end_offset: int = None,
+    ) -> None:
+    """
+    Compares velocities calculated from the shift in mean x_perpendicular position over time.
+    This provides a measure of bulk tissue movement rather than individual point velocities.
+
+    Parameters:
+    *datasets : tuple of (df, label, color)
+        Variable number of datasets, each as a tuple of (dataframe, label, color)
+    cell_ids (list): List of cell IDs to include in the plot. If None, all cells are included.
+    output_path (str): Path to save the plot. If None, the plot is shown instead.
+    abs (bool): If True, compute the average of the absolute x_perpendicular values before calculating velocity.
+    end_offset (int): Ending time offset relative to cut. If None, uses max offset in data.
+    
+    Returns:
+    None
+    """
+    if len(datasets) == 0:
+        raise ValueError("At least one dataset must be provided")
+    
+    plt.figure(figsize=(9.5, 5))
+    
+    all_min_frames = []
+    all_max_frames = []
+    
+    for df, label, color in datasets:
+        df = df.copy()
+
+        df = df[df['cut'] == False]
+        
+        # Filter by cell_ids if provided
+        if cell_ids is not None:
+            df = df[df['cell_id'].isin(cell_ids)]
+        
+        # Drop NaNs in required columns
+        df = df.dropna(subset=['frame_rel', 'x_perpendicular'])
+        
+        if end_offset is not None:
+            df = df[df['frame_rel'] <= end_offset]
+        
+        # Calculate mean x_perpendicular per frame_rel
+        if abs:
+            df['x_perpendicular'] = df['x_perpendicular'].abs()
+            
+        mean_x_perp = df.groupby('frame_rel')['x_perpendicular'].mean()
+        
+        # Calculate velocity as change in mean position
+        # velocity[t] = mean_x_perp[t+1] - mean_x_perp[t]
+        velocity = mean_x_perp.diff()
+        
+        # Remove NaN values (first frame has no velocity)
+        velocity = velocity.dropna()
+        
+        if len(velocity) > 0:
+            all_min_frames.append(velocity.index.min())
+            all_max_frames.append(velocity.index.max())
+        
+        # Label depends on abs setting
+        if abs:
+            plot_label = f'{label} Mean Displacement Velocity (|x_perp|)'
+        else:
+            plot_label = f'{label} Mean Displacement Velocity'
+        
+        # Plot the velocity
+        plt.plot(velocity.index, velocity.values, color=color, linewidth=2.5, label=plot_label, marker='o', markersize=4)
+    
+    plt.xlabel('Frame (relative to cut)')
+    plt.ylabel('Mean Displacement Velocity (pixels/frame)')
+    
+    if all_min_frames and all_max_frames:
+        plt.xticks(np.arange(int(min(all_min_frames)), int(max(all_max_frames)) + 1, 1))
+    
+    plt.title('Comparison of Mean Displacement Velocities over Time', fontweight='bold')
+    plt.grid(True, alpha=0.3, linestyle='--')
+    plt.legend()
+    plt.axhline(0, color='black', linestyle='--', alpha=0.3, linewidth=1)
+
+    if output_path:
+        plt.savefig(output_path, dpi=300)
+    else:
+        plt.show()
+
+    return
+
+
+def plot_point_position_mse(
+        df: pd.DataFrame,
+        cell_ids: list = None,
+        output_path: str = None,
+        end_offset: int = None,
+    ) -> None:
+    """
+    Plots the Mean Squared Error (MSE) of point positions over time (frame_rel).
+
+    Parameters:
+    df (pd.DataFrame): DataFrame containing 'frame_rel', 'mse', and 'cell_id' columns.
+    cell_ids (list): List of cell IDs to include in the plot. If None, all cells are included.
+    output_path (str): Path to save the plot. If None, the plot is shown instead.
+
+    Returns:
+    None
+    """
+
+    df = df.copy()
+
+    # Filter by cell_ids if provided
+    if cell_ids is not None:
+        df = df[df['cell_id'].isin(cell_ids)]
+
+    # Drop NaNs in required columns
+    df = df.dropna(subset=['frame_rel', 'se'])
+
+    if end_offset is not None:
+        df = df[(df['frame_rel'] >= -1) & (df['frame_rel'] <= end_offset)]
+
+    mse_per_frame_rel = df.groupby('frame_rel')['se'].mean()
+
+    plt.figure(figsize=(6,5))
+    plt.plot(mse_per_frame_rel.index, mse_per_frame_rel.values, marker='o', linewidth=2, markersize=8)
+    plt.xlabel('Frame relative to cut')
+    plt.ylabel('Mean Squared Error (pixels²)')
+    plt.ylim(bottom=0)
+    plt.title('PIV Point Position Error Over Time', fontweight='bold')
+    plt.grid(True, alpha=0.3)
+
+    if output_path:
+        plt.savefig(output_path, dpi=300)
+    else:
+        plt.show()
+
+    return
+
+
