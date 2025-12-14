@@ -91,7 +91,8 @@ def plot_sdf(data: np.ndarray,
              origin: tuple[int, int],
              destination: tuple[int, int],
              title: str = 'SDF',
-             cmap: str = 'RdBu_r') -> None:
+             cmap: str = 'RdBu_r',
+             legend: bool = True) -> None:
     fig, ax = plt.subplots(figsize=(4, 4))
     img = ax.imshow(data, cmap=cmap, origin='upper')
     ax.set_title(title)
@@ -110,7 +111,8 @@ def plot_sdf(data: np.ndarray,
     cbar = fig.colorbar(img, cax=cax)
     cbar.set_label('Distance (Euclidean)', rotation=270, labelpad=12)
     
-    ax.legend(loc='upper right', fontsize=8)
+    if legend:
+        ax.legend(loc='upper right', fontsize=8)
     plt.tight_layout()
     plt.show()
 

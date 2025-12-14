@@ -153,6 +153,51 @@ class ResidualUNet(nn.Module):
         out = self.proj_out(out)
         return out
     
+class ResidualUNetMagnitude(nn.Module):
+    def __init__(self, base_ch=32, in_ch=2, out_ch=3):
+        super().__init__()
+
+        self.proj_in = nn.Conv2d(in_ch, base_ch, 1)
+        self.proj_out = nn.Conv2d(base_ch, out_ch, 1)
+
+        # Down path
+        self.down1 = BaseConv(base_ch, base_ch)
+        self.down2 = DownConv(base_ch, base_ch * 2)
+        self.down3 = DownConv(base_ch * 2, base_ch * 4)
+        self.down4 = DownConv(base_ch * 4, base_ch * 8)
+
+        # Bottleneck
+        self.b1 = BaseConv(base_ch * 8, base_ch * 8)
+        self.b2 = BaseConv(base_ch * 8, base_ch * 8)
+
+        # Up path - use UpConvResidual so we properly upsample then concat skip
+        self.up1 = UpConvResidual(base_ch * 8, base_ch * 4, base_ch * 4)  # up b (8ch) + s3 (4ch) -> 4ch
+        self.up2 = UpConvResidual(base_ch * 4, base_ch * 2, base_ch * 2)  # up prev (4ch) + s2 (2ch) -> 2ch
+        self.up3 = UpConvResidual(base_ch * 2, base_ch, base_ch)          # up prev (2ch) + s1 (1ch) -> 1ch
+        self.last = BaseConv(base_ch, base_ch)
+
+    def forward(self, x):
+        x = self.proj_in(x)
+
+        # Down path (store skips)
+        s1 = self.down1(x)          # base_ch
+        s2 = self.down2(s1)         # base_ch * 2
+        s3 = self.down3(s2)         # base_ch * 4
+        s4 = self.down4(s3)         # base_ch * 8
+
+        # Bottleneck
+        b = self.b1(s4)
+        b = self.b2(b)
+
+        # Up path with skip concatenation using UpConvResidual
+        u1 = self.up1(b, s3)
+        u2 = self.up2(u1, s2)
+        u3 = self.up3(u2, s1)
+
+        out = self.last(u3)
+        out = self.proj_out(out)
+        return out
+    
 class ResidualUNetLarge(nn.Module):
     def __init__(self, base_ch=32, in_ch=2, out_ch=2):
         super().__init__()

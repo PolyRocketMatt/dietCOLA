@@ -191,20 +191,22 @@ def gen_advected_cortex_worker(idx: int, out: str, step: float, max_offset: int,
     )
 
     # 6b. Multiply the advected cortices with the blurred SDF fields to obtain a similar data representation as the actual input.
+    non_multiplied = advected_cortex.copy()
     advected_cortex = mul(advected_cortex, blurred_masked_sdf_fields)
     
     # 6d. Better training if velocity field is multiplied by actomyosin layer? (Black pixels can't move)
     # TODO -> Make this a BINARY MASK based on advected cortex above some threshold!
-    threshold = 0.15
+    threshold = 0
     cortex_mask = (advected_cortex > threshold).astype(float)
-    vel_dxs = vel_dxs * cortex_mask
-    vel_dys = vel_dys * cortex_mask
+    vel_dxs = vel_dxs * advected_cortex
+    vel_dys = vel_dys * advected_cortex
 
     # 6c. Diversify
     aug_angle = 0 #np.random.randint(360)
     aug_scale = 1 #np.random.rand() * 2
-    aug_trans = (np.random.randint(128) - 64, np.random.randint(128) - 64)
+    aug_trans = (0, 0) #(np.random.randint(128) - 64, np.random.randint(128) - 64)
 
+    non_multiplied = augment_array_chw(non_multiplied, aug_angle, aug_scale, aug_trans)
     advected_cortex = augment_array_chw(advected_cortex, aug_angle, aug_scale, aug_trans)
     velocity_fields = augment_array_chw(velocity_fields, aug_angle, aug_scale, aug_trans)
     vel_dxs = augment_array_chw(vel_dxs, aug_angle, aug_scale, aug_trans)
@@ -216,9 +218,11 @@ def gen_advected_cortex_worker(idx: int, out: str, step: float, max_offset: int,
     cell_uuid = shortuuid.uuid()
 
     # 7b. Save the advected cortex and its separate layers
+    save_array(non_multiplied, Path(out) / f'cortex_{cell_uuid}_poster_example.npy')
     save_array(advected_cortex, Path(out) / f'cortex_{cell_uuid}_actomyosin.npy')
 
     # 7c. Save the velocity field that was used to advect the cortex
+    save_array(clipped_rounded_sdf_fields, Path(out) / f'cortex_{cell_uuid}_sdfs.npy')
     save_array(velocity_fields, Path(out) / f'cortex_{cell_uuid}_velocity_field.npy')
     save_array(vel_dxs, Path(out) / f'cortex_{cell_uuid}_velocity_field_dx.npy')
     save_array(vel_dys, Path(out) / f'cortex_{cell_uuid}_velocity_field_dy.npy')
